@@ -35,10 +35,33 @@
 #include "rx/rx.h"
 #include "rx/sbus.h"
 
-#define DEBUG_SBUS_PACKETS
+/*
+ * Observations
+ *
+ * FrSky X8R
+ * time between frames: 6ms.
+ * time to send frame: 3ms.
+*
+ * Futaba R6208SB/R6303SB
+ * time between frames: 11ms.
+ * time to send frame: 3ms.
+ */
 
+#define SBUS_TIME_NEEDED_PER_FRAME 3000
 
-#define SBUS_MAX_CHANNEL 16
+#ifndef CJMCU
+//#define DEBUG_SBUS_PACKETS
+#endif
+
+#ifdef DEBUG_SBUS_PACKETS
+static uint16_t sbusStateFlags = 0;
+
+#define SBUS_STATE_FAILSAFE (1 << 0)
+#define SBUS_STATE_SIGNALLOSS (1 << 1)
+
+#endif
+
+#define SBUS_MAX_CHANNEL 18
 #define SBUS_FRAME_SIZE 25
 
 #define SBUS_FRAME_BEGIN_BYTE 0x0F
@@ -46,39 +69,36 @@
 
 #define SBUS_BAUDRATE 100000
 
+#define SBUS_DIGITAL_CHANNEL_MIN 173
+#define SBUS_DIGITAL_CHANNEL_MAX 1812
+
 static bool sbusFrameDone = false;
 static void sbusDataReceive(uint16_t c);
 static uint16_t sbusReadRawRC(rxRuntimeConfig_t *rxRuntimeConfig, uint8_t chan);
 
 static uint32_t sbusChannelData[SBUS_MAX_CHANNEL];
 
-static serialPort_t *sBusPort;
-static uint32_t sbusSignalLostEventCount = 0;
-
-void sbusUpdateSerialRxFunctionConstraint(functionConstraint_t *functionConstraint)
-{
-    functionConstraint->minBaudRate = SBUS_BAUDRATE;
-    functionConstraint->maxBaudRate = SBUS_BAUDRATE;
-    functionConstraint->requiredSerialPortFeatures = SPF_SUPPORTS_CALLBACK | SPF_SUPPORTS_SBUS_MODE;
-}
-
 bool sbusInit(rxConfig_t *rxConfig, rxRuntimeConfig_t *rxRuntimeConfig, rcReadRawDataPtr *callback)
 {
     int b;
-
-    sBusPort = openSerialPort(FUNCTION_SERIAL_RX, sbusDataReceive, SBUS_BAUDRATE, (portMode_t)(MODE_RX | MODE_SBUS), SERIAL_INVERTED);
-
     for (b = 0; b < SBUS_MAX_CHANNEL; b++)
         sbusChannelData[b] = (1.6f * rxConfig->midrc) - 1408;
     if (callback)
         *callback = sbusReadRawRC;
     rxRuntimeConfig->channelCount = SBUS_MAX_CHANNEL;
 
+    serialPortConfig_t *portConfig = findSerialPortConfig(FUNCTION_RX_SERIAL);
+    if (!portConfig) {
+        return false;
+    }
+
+    serialPort_t *sBusPort = openSerialPort(portConfig->identifier, FUNCTION_RX_SERIAL, sbusDataReceive, SBUS_BAUDRATE, (portMode_t)(MODE_RX | MODE_SBUS), SERIAL_INVERTED);
+
     return sBusPort != NULL;
 }
 
-#define SBUS_FLAG_RESERVED_1        (1 << 0)
-#define SBUS_FLAG_RESERVED_2        (1 << 1)
+#define SBUS_FLAG_CHANNEL_17        (1 << 0)
+#define SBUS_FLAG_CHANNEL_18        (1 << 1)
 #define SBUS_FLAG_SIGNAL_LOSS       (1 << 2)
 #define SBUS_FLAG_FAILSAFE_ACTIVE   (1 << 3)
 
@@ -115,23 +135,23 @@ static sbusFrame_t sbusFrame;
 // Receive ISR callback
 static void sbusDataReceive(uint16_t c)
 {
-#ifdef DEBUG_SBUS_PACKETS
-    static uint8_t sbusUnusedFrameCount = 0;
-#endif
-
     static uint8_t sbusFramePosition = 0;
-    static uint32_t sbusTimeoutAt = 0;
+    static uint32_t sbusFrameStartAt = 0;
     uint32_t now = micros();
 
-    if ((int32_t)(sbusTimeoutAt - now) < 0) {
+    int32_t sbusFrameTime = now - sbusFrameStartAt;
+
+    if (sbusFrameTime > (long)(SBUS_TIME_NEEDED_PER_FRAME + 500)) {
         sbusFramePosition = 0;
     }
-    sbusTimeoutAt = now + 2500;
 
     sbusFrame.bytes[sbusFramePosition] = (uint8_t)c;
 
-    if (sbusFramePosition == 0 && c != SBUS_FRAME_BEGIN_BYTE) {
-        return;
+    if (sbusFramePosition == 0) {
+        if (c != SBUS_FRAME_BEGIN_BYTE) {
+            return;
+        }
+        sbusFrameStartAt = now;
     }
 
     sbusFramePosition++;
@@ -139,14 +159,11 @@ static void sbusDataReceive(uint16_t c)
     if (sbusFramePosition == SBUS_FRAME_SIZE) {
         if (sbusFrame.frame.endByte == SBUS_FRAME_END_BYTE) {
             sbusFrameDone = true;
-        }
-        sbusFramePosition = 0;
-    } else {
 #ifdef DEBUG_SBUS_PACKETS
-        if (sbusFrameDone) {
-            sbusUnusedFrameCount++;
-        }
+            debug[2] = sbusFrameTime;
 #endif
+        }
+    } else {
         sbusFrameDone = false;
     }
 }
@@ -158,14 +175,10 @@ bool sbusFrameComplete(void)
     }
     sbusFrameDone = false;
 
-    if (sbusFrame.frame.flags & SBUS_FLAG_SIGNAL_LOSS) {
-        // internal failsafe enabled and rx failsafe flag set
-        sbusSignalLostEventCount++;
-    }
-    if (sbusFrame.frame.flags & SBUS_FLAG_FAILSAFE_ACTIVE) {
-        // internal failsafe enabled and rx failsafe flag set
-        return false;
-    }
+#ifdef DEBUG_SBUS_PACKETS
+    sbusStateFlags = 0;
+    debug[1] = sbusFrame.frame.flags;
+#endif
 
     sbusChannelData[0] = sbusFrame.frame.chan0;
     sbusChannelData[1] = sbusFrame.frame.chan1;
@@ -183,6 +196,38 @@ bool sbusFrameComplete(void)
     sbusChannelData[13] = sbusFrame.frame.chan13;
     sbusChannelData[14] = sbusFrame.frame.chan14;
     sbusChannelData[15] = sbusFrame.frame.chan15;
+
+    if (sbusFrame.frame.flags & SBUS_FLAG_CHANNEL_17) {
+        sbusChannelData[16] = SBUS_DIGITAL_CHANNEL_MAX;
+    } else {
+        sbusChannelData[16] = SBUS_DIGITAL_CHANNEL_MIN;
+    }
+
+    if (sbusFrame.frame.flags & SBUS_FLAG_CHANNEL_18) {
+        sbusChannelData[17] = SBUS_DIGITAL_CHANNEL_MAX;
+    } else {
+        sbusChannelData[17] = SBUS_DIGITAL_CHANNEL_MIN;
+    }
+
+    if (sbusFrame.frame.flags & SBUS_FLAG_SIGNAL_LOSS) {
+#ifdef DEBUG_SBUS_PACKETS
+        sbusStateFlags |= SBUS_STATE_SIGNALLOSS;
+        debug[0] = sbusStateFlags;
+#endif
+    }
+    if (sbusFrame.frame.flags & SBUS_FLAG_FAILSAFE_ACTIVE) {
+        // internal failsafe enabled and rx failsafe flag set
+#ifdef DEBUG_SBUS_PACKETS
+        sbusStateFlags |= SBUS_STATE_FAILSAFE;
+        debug[0] = sbusStateFlags;
+#endif
+        // RX *should* still be sending valid channel data, so use it.
+        return false;
+    }
+
+#ifdef DEBUG_SBUS_PACKETS
+    debug[0] = sbusStateFlags;
+#endif
     return true;
 }
 
