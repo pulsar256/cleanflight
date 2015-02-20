@@ -310,9 +310,7 @@ void mwDisarm(void)
         if (feature(FEATURE_TELEMETRY)) {
             // the telemetry state must be checked immediately so that shared serial ports are released.
             checkTelemetryState();
-            if (isSerialPortFunctionShared(FUNCTION_TELEMETRY, FUNCTION_MSP)) {
-                mspAllocateSerialPorts(&masterConfig.serialConfig);
-            }
+            mspAllocateSerialPorts(&masterConfig.serialConfig);
         }
 #endif
 
@@ -323,6 +321,8 @@ void mwDisarm(void)
 #endif
     }
 }
+
+#define TELEMETRY_FUNCTION_MASK (FUNCTION_TELEMETRY_FRSKY | FUNCTION_TELEMETRY_HOTT | FUNCTION_TELEMETRY_MSP | FUNCTION_TELEMETRY_SMARTPORT)
 
 void mwArm(void)
 {
@@ -336,9 +336,12 @@ void mwArm(void)
 
 #ifdef TELEMETRY
             if (feature(FEATURE_TELEMETRY)) {
-                serialPort_t *sharedTelemetryAndMspPort = findSharedSerialPort(FUNCTION_TELEMETRY, FUNCTION_MSP);
-                if (sharedTelemetryAndMspPort) {
-                    mspReleasePortIfAllocated(sharedTelemetryAndMspPort);
+
+
+                serialPort_t *sharedPort = findSharedSerialPort(TELEMETRY_FUNCTION_MASK, FUNCTION_MSP);
+                while (sharedPort) {
+                    mspReleasePortIfAllocated(sharedPort);
+                    sharedPort = findNextSharedSerialPort(TELEMETRY_FUNCTION_MASK, FUNCTION_MSP);
                 }
             }
 #endif
@@ -722,7 +725,12 @@ void loop(void)
         );
 
         mixTable();
+
+#ifdef USE_SERVOS
+        filterServos();
         writeServos();
+#endif
+
         writeMotors();
 
 #ifdef BLACKBOX

@@ -74,9 +74,17 @@
 #define BRUSHLESS_MOTORS_PWM_RATE 400
 
 void setPIDController(int type); // FIXME PID code needs to be in flight_pid.c/h
-void mixerUseConfigs(servoParam_t *servoConfToUse, flight3DConfig_t *flight3DConfigToUse,
-        escAndServoConfig_t *escAndServoConfigToUse, mixerConfig_t *mixerConfigToUse,
-        airplaneConfig_t *airplaneConfigToUse, rxConfig_t *rxConfig, gimbalConfig_t *gimbalConfigToUse);
+void mixerUseConfigs(
+#ifdef USE_SERVOS
+        servoParam_t *servoConfToUse,
+        gimbalConfig_t *gimbalConfigToUse,
+#endif
+        flight3DConfig_t *flight3DConfigToUse,
+        escAndServoConfig_t *escAndServoConfigToUse,
+        mixerConfig_t *mixerConfigToUse,
+        airplaneConfig_t *airplaneConfigToUse,
+        rxConfig_t *rxConfig
+);
 void useRcControlsConfig(modeActivationCondition_t *modeActivationConditions, escAndServoConfig_t *escAndServoConfigToUse, pidProfile_t *pidProfileToUse);
 
 #define FLASH_TO_RESERVE_FOR_CONFIG 0x800
@@ -111,7 +119,7 @@ profile_t *currentProfile;
 static uint8_t currentControlRateProfileIndex = 0;
 controlRateConfig_t *currentControlRateProfile;
 
-static const uint8_t EEPROM_CONF_VERSION = 91;
+static const uint8_t EEPROM_CONF_VERSION = 93;
 
 static void resetAccelerometerTrims(flightDynamicsTrims_t *accelerometerTrims)
 {
@@ -213,7 +221,6 @@ void resetFlight3DConfig(flight3DConfig_t *flight3DConfig)
 
 void resetTelemetryConfig(telemetryConfig_t *telemetryConfig)
 {
-    telemetryConfig->telemetry_provider = TELEMETRY_PROVIDER_FRSKY;
     telemetryConfig->telemetry_inversion = SERIAL_NOT_INVERTED;
     telemetryConfig->telemetry_switch = 0;
     telemetryConfig->gpsNoFixLatitude = 0;
@@ -244,30 +251,23 @@ void resetBatteryConfig(batteryConfig_t *batteryConfig)
 
 void resetSerialConfig(serialConfig_t *serialConfig)
 {
-    serialConfig->serial_port_scenario[FIRST_PORT_INDEX] = lookupScenarioIndex(SCENARIO_MSP_CLI_TELEMETRY_GPS_PASTHROUGH);
+    uint8_t index;
+    memset(serialConfig, 0, sizeof(serialConfig_t));
+
+    for (index = 0; index < SERIAL_PORT_COUNT; index++) {
+        serialConfig->portConfigs[index].identifier = serialPortIdentifiers[index];
+        serialConfig->portConfigs[index].msp_baudrateIndex = BAUD_115200;
+        serialConfig->portConfigs[index].gps_baudrateIndex = BAUD_57600;
+        serialConfig->portConfigs[index].telemetry_baudrateIndex = BAUD_AUTO;
+        serialConfig->portConfigs[index].blackbox_baudrateIndex = BAUD_115200;
+    }
+
+    serialConfig->portConfigs[0].functionMask = FUNCTION_MSP;
 
 #ifdef CC3D
-    // Temporary workaround for CC3D non-functional VCP when using OpenPilot bootloader.
-    // This allows MSP connection via USART so the board can be reconfigured.
-    serialConfig->serial_port_scenario[SECOND_PORT_INDEX] = lookupScenarioIndex(SCENARIO_MSP_ONLY);
-#else
-    serialConfig->serial_port_scenario[SECOND_PORT_INDEX] = lookupScenarioIndex(SCENARIO_UNUSED);
+    // This allows MSP connection via USART & VCP so the board can be reconfigured.
+    serialConfig->portConfigs[1].functionMask = FUNCTION_MSP;
 #endif
-
-#if (SERIAL_PORT_COUNT > 2)
-    serialConfig->serial_port_scenario[2] = lookupScenarioIndex(SCENARIO_UNUSED);
-#if (SERIAL_PORT_COUNT > 3)
-    serialConfig->serial_port_scenario[3] = lookupScenarioIndex(SCENARIO_UNUSED);
-#if (SERIAL_PORT_COUNT > 4)
-    serialConfig->serial_port_scenario[4] = lookupScenarioIndex(SCENARIO_UNUSED);
-#endif
-#endif
-#endif
-
-    serialConfig->msp_baudrate = 115200;
-    serialConfig->cli_baudrate = 115200;
-    serialConfig->gps_baudrate = 115200;
-    serialConfig->gps_passthrough_baudrate = 115200;
 
     serialConfig->reboot_character = 'R';
 }
@@ -319,7 +319,10 @@ static void setControlRateProfile(uint8_t profileIndex)
 static void resetConf(void)
 {
     int i;
-    int8_t servoRates[8] = { 30, 30, 100, 100, 100, 100, 100, 100 };
+#ifdef USE_SERVOS
+    int8_t servoRates[MAX_SUPPORTED_SERVOS] = { 30, 30, 100, 100, 100, 100, 100, 100 };
+    ;
+#endif
 
     // Clear all configuration
     memset(&masterConfig, 0, sizeof(master_t));
@@ -434,8 +437,9 @@ static void resetConf(void)
     currentProfile->failsafeConfig.failsafe_min_usec = 985;          // any of first 4 channels below this value will trigger failsafe
     currentProfile->failsafeConfig.failsafe_max_usec = 2115;         // any of first 4 channels above this value will trigger failsafe
 
+#ifdef USE_SERVOS
     // servos
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
         currentProfile->servoConf[i].min = DEFAULT_SERVO_MIN;
         currentProfile->servoConf[i].max = DEFAULT_SERVO_MAX;
         currentProfile->servoConf[i].middle = DEFAULT_SERVO_MIDDLE;
@@ -445,9 +449,12 @@ static void resetConf(void)
 
     currentProfile->mixerConfig.yaw_direction = 1;
     currentProfile->mixerConfig.tri_unarmed_servo = 1;
+    currentProfile->mixerConfig.servo_lowpass_freq = 400;
+    currentProfile->mixerConfig.servo_lowpass_enable = 0;
 
     // gimbal
     currentProfile->gimbalConfig.gimbal_flags = GIMBAL_NORMAL;
+#endif
 
 #ifdef GPS
     resetGpsProfile(&currentProfile->gpsProfile);
@@ -463,6 +470,7 @@ static void resetConf(void)
 #endif
 
 #ifdef BLACKBOX
+    masterConfig.blackbox_device = 0;
     masterConfig.blackbox_rate_num = 1;
     masterConfig.blackbox_rate_denom = 1;
 #endif
@@ -474,9 +482,9 @@ static void resetConf(void)
     featureSet(FEATURE_FAILSAFE);
     featureClear(FEATURE_VBAT);
 #ifdef ALIENWIIF3
-    masterConfig.serialConfig.serial_port_scenario[2] = lookupScenarioIndex(SCENARIO_SERIAL_RX_ONLY);
+    masterConfig.serialConfig.portConfigs[2].functionMask = FUNCTION_RX_SERIAL;
 #else
-    masterConfig.serialConfig.serial_port_scenario[1] = lookupScenarioIndex(SCENARIO_SERIAL_RX_ONLY);
+    masterConfig.serialConfig.portConfigs[1].functionMask = FUNCTION_RX_SERIAL;
 #endif
     masterConfig.rxConfig.serialrx_provider = 1;
     masterConfig.rxConfig.spektrum_sat_bind = 5;
@@ -604,6 +612,8 @@ void activateConfig(void)
 
     activateControlRateConfig();
 
+    resetAdjustmentStates();
+
     useRcControlsConfig(
         currentProfile->modeActivationConditions,
         &masterConfig.escAndServoConfig,
@@ -627,13 +637,15 @@ void activateConfig(void)
     setAccelerationTrims(&masterConfig.accZero);
 
     mixerUseConfigs(
+#ifdef USE_SERVOS
         currentProfile->servoConf,
+        &currentProfile->gimbalConfig,
+#endif
         &masterConfig.flight3DConfig,
         &masterConfig.escAndServoConfig,
         &currentProfile->mixerConfig,
         &masterConfig.airplaneConfig,
-        &masterConfig.rxConfig,
-        &currentProfile->gimbalConfig
+        &masterConfig.rxConfig
     );
 
     imuRuntimeConfig.gyro_cmpf_factor = masterConfig.gyro_cmpf_factor;
@@ -743,7 +755,6 @@ void validateAndFixConfig(void)
     useRxConfig(&masterConfig.rxConfig);
 
     serialConfig_t *serialConfig = &masterConfig.serialConfig;
-    applySerialConfigToPortFunctions(serialConfig);
 
     if (!isSerialConfigValid(serialConfig)) {
         resetSerialConfig(serialConfig);

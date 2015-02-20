@@ -61,11 +61,16 @@
 #include "telemetry/telemetry.h"
 #include "telemetry/frsky.h"
 
-static serialPort_t *frskyPort;
+static serialPort_t *frskyPort = NULL;
+static serialPortConfig_t *portConfig;
+
 #define FRSKY_BAUDRATE 9600
 #define FRSKY_INITIAL_PORT_MODE MODE_TX
 
 static telemetryConfig_t *telemetryConfig;
+static bool frskyTelemetryEnabled =  false;
+static portSharing_e frskyPortSharing;
+
 
 extern batteryConfig_t *batteryConfig;
 
@@ -402,45 +407,29 @@ static void sendHeading(void)
 void initFrSkyTelemetry(telemetryConfig_t *initialTelemetryConfig)
 {
     telemetryConfig = initialTelemetryConfig;
+    portConfig = findSerialPortConfig(FUNCTION_TELEMETRY_FRSKY);
+    frskyPortSharing = determinePortSharing(portConfig, FUNCTION_TELEMETRY_FRSKY);
 }
-
-static portMode_t previousPortMode;
-static uint32_t previousBaudRate;
 
 void freeFrSkyTelemetryPort(void)
 {
-    // FIXME only need to reset the port if the port is shared
-    serialSetMode(frskyPort, previousPortMode);
-    serialSetBaudRate(frskyPort, previousBaudRate);
-
-    endSerialPortFunction(frskyPort, FUNCTION_TELEMETRY);
+    closeSerialPort(frskyPort);
+    frskyPort = NULL;
+    frskyTelemetryEnabled = false;
 }
 
 void configureFrSkyTelemetryPort(void)
 {
-    frskyPort = findOpenSerialPort(FUNCTION_TELEMETRY);
-    if (frskyPort) {
-        previousPortMode = frskyPort->mode;
-        previousBaudRate = frskyPort->baudRate;
-
-        //waitForSerialPortToFinishTransmitting(frskyPort); // FIXME locks up the system
-
-        serialSetBaudRate(frskyPort, FRSKY_BAUDRATE);
-        serialSetMode(frskyPort, FRSKY_INITIAL_PORT_MODE);
-        beginSerialPortFunction(frskyPort, FUNCTION_TELEMETRY);
-    } else {
-        frskyPort = openSerialPort(FUNCTION_TELEMETRY, NULL, FRSKY_BAUDRATE, FRSKY_INITIAL_PORT_MODE, telemetryConfig->telemetry_inversion);
-
-        // FIXME only need these values to reset the port if the port is shared
-        previousPortMode = frskyPort->mode;
-        previousBaudRate = frskyPort->baudRate;
+    if (!portConfig) {
+        return;
     }
-}
 
+    frskyPort = openSerialPort(portConfig->identifier, FUNCTION_TELEMETRY_FRSKY, NULL, FRSKY_BAUDRATE, FRSKY_INITIAL_PORT_MODE, telemetryConfig->telemetry_inversion);
+    if (!frskyPort) {
+        return;
+    }
 
-bool canSendFrSkyTelemetry(void)
-{
-    return serialTotalBytesWaiting(frskyPort) == 0;
+    frskyTelemetryEnabled = true;
 }
 
 bool hasEnoughTimeLapsedSinceLastTelemetryTransmission(uint32_t currentMillis)
@@ -448,9 +437,23 @@ bool hasEnoughTimeLapsedSinceLastTelemetryTransmission(uint32_t currentMillis)
     return currentMillis - lastCycleTime >= CYCLETIME;
 }
 
+void checkFrSkyTelemetryState(void)
+{
+    bool newTelemetryEnabledValue = determineNewTelemetryEnabledState(frskyPortSharing);
+
+    if (newTelemetryEnabledValue == frskyTelemetryEnabled) {
+        return;
+    }
+
+    if (newTelemetryEnabledValue)
+        configureFrSkyTelemetryPort();
+    else
+        freeFrSkyTelemetryPort();
+}
+
 void handleFrSkyTelemetry(void)
 {
-    if (!canSendFrSkyTelemetry()) {
+    if (!frskyTelemetryEnabled) {
         return;
     }
 
@@ -510,7 +513,4 @@ void handleFrSkyTelemetry(void)
     }
 }
 
-uint32_t getFrSkyTelemetryProviderBaudRate(void) {
-    return FRSKY_BAUDRATE;
-}
 #endif
