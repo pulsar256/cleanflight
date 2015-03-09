@@ -122,8 +122,7 @@ typedef struct controlRateConfig_s {
     uint8_t rcExpo8;
     uint8_t thrMid8;
     uint8_t thrExpo8;
-    uint8_t rollPitchRate;
-    uint8_t yawRate;
+    uint8_t rates[3];
     uint8_t dynThrPID;
     uint16_t tpa_breakpoint;                // Breakpoint where TPA is activated
 } controlRateConfig_t;
@@ -157,10 +156,12 @@ typedef enum {
     ADJUSTMENT_YAW_P,
     ADJUSTMENT_YAW_I,
     ADJUSTMENT_YAW_D,
-    ADJUSTMENT_RATE_PROFILE
+    ADJUSTMENT_RATE_PROFILE,
+    ADJUSTMENT_PITCH_RATE,
+    ADJUSTMENT_ROLL_RATE,
 } adjustmentFunction_e;
 
-#define ADJUSTMENT_FUNCTION_COUNT 13
+#define ADJUSTMENT_FUNCTION_COUNT 15
 
 typedef enum {
     ADJUSTMENT_MODE_STEP,

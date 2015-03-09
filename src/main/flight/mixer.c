@@ -202,7 +202,7 @@ static const motorMixer_t mixerDualcopter[] = {
     { 1.0f,  0.0f,  0.0f,  1.0f },          // RIGHT
 };
 
-// Keep this synced with MultiType struct in mw.h!
+// Keep synced with mixerMode_e
 const mixer_t mixers[] = {
 //    Mo Se Mixtable
     { 0, 0, NULL },                // entry 0
@@ -564,6 +564,13 @@ void mixTable(void)
     }
 
 #if !defined(USE_QUAD_MIXER_ONLY) || defined(USE_SERVOS)
+    int8_t yawDirection3D = 1;
+
+    // Reverse yaw servo when inverted in 3D mode
+    if (feature(FEATURE_3D) && (rcData[THROTTLE] < rxConfig->midrc)) {
+        yawDirection3D = -1;
+    }
+
     // airplane / servo mixes
     switch (currentMixerMode) {
         case MIXER_BI:
@@ -572,7 +579,7 @@ void mixTable(void)
             break;
 
         case MIXER_TRI:
-            servo[5] = (servoDirection(5, 1) * axisPID[YAW]) + determineServoMiddleOrForwardFromChannel(5); // REAR
+            servo[5] = (servoDirection(5, 1) * axisPID[YAW] * yawDirection3D) + determineServoMiddleOrForwardFromChannel(5); // REAR
             break;
 
         case MIXER_GIMBAL:
