@@ -14,7 +14,7 @@ elif [ $PUBLISHDOCS ] ; then
 	if [ $PUBLISH_URL ] ; then
 
 		#sudo apt-get install ruby1.9.1 ruby1.9.1-dev rubygems zlib1g-dev libssl-dev
-		sudo apt-get install zlib1g-dev libssl-dev wkhtmltopdf libxml2-dev libxslt-dev ruby-rvm
+		sudo apt-get install zlib1g-dev libssl-dev wkhtmltopdf libxml2-dev libxslt-dev #ruby-rvm
 		# rvmsudo gem1.9.1 install gimli
 
     rvmsudo rvm package install openssl
