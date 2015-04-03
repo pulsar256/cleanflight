@@ -21,7 +21,10 @@ env:
 language: cpp
 compiler: clang
 
-before_install: 
+rvm:
+  - 1.9.1
+
+before_install:
   - sudo apt-get update
   - wget "https://launchpad.net/gcc-arm-embedded/4.8/4.8-2014-q3-update/+download/gcc-arm-none-eabi-4_8-2014q3-20140805-linux.tar.bz2"
 

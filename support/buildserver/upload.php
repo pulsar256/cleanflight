@@ -15,7 +15,7 @@
 	$uploadDir = $baseDir . "/" . $lastCommitDate . "/";
 	$prefix = $uploadDir . $travisJobId . "_" . $revision;
 
-	if(!file_exists($uploadDir)) mkdir($uploadDir, 0660, true);
+	if(!file_exists($uploadDir)) mkdir($uploadDir, 0770, true);
 
 	if($firmwareFile) {
 		$uploadfile = $prefix . "_" . (basename($firmwareFile['name']));
