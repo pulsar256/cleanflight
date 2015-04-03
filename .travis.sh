@@ -17,7 +17,7 @@ elif [ $PUBLISHDOCS ] ; then
 		sudo apt-get install wkhtmltopdf libxml2-dev libxslt-dev
 		sudo gem1.9.1 install gimli
 
-		./build_manual.sh
+		./build_docs.sh
 		curl -k \
 			--form "manual=@docs/Manual.pdf" \
 			--form "revision=${REVISION}" \
