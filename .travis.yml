@@ -1,6 +1,7 @@
 env:
   - RUNTESTS=True
   - PUBLISHMETA=True
+  - PUBLISHDOCS=True
   - TARGET=CC3D
   - TARGET=CC3D OPBL=yes 
   - TARGET=CHEBUZZF3
@@ -15,6 +16,7 @@ env:
   - TARGET=STM32F3DISCOVERY
   - TARGET=ALIENWIIF1
   - TARGET=ALIENWIIF3
+
 # We use cpp for unit tests, and c for the main project.
 language: cpp
 compiler: clang
@@ -31,7 +33,7 @@ install:
 before_script: arm-none-eabi-gcc --version
 script: ./.travis.sh
 
-notifications:
-  irc: "chat.freenode.net#cleanflight"
-  use_notice: true
-  skip_join: true
+#notifications:
+#  irc: "chat.freenode.net#cleanflight"
+#  use_notice: true
+#  skip_join: true
