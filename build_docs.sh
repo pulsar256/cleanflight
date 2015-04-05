@@ -45,10 +45,16 @@ if which gimli >/dev/null; then
 	for i in "${doc_files[@]}"
 	do
 		cat "$i" >> ${filename}.md
+		echo -e "\n" >> ${filename}.md
 	done
 	rm -f ${filename}.pdf
-	gimli -f ${filename}.md -stylesheet override.css
-	rm ${filename}.md 
+	rm manual_build -Rfv
+	mkdir manual_build
+	generate-md --layout github --input ./Manual.md --output ./manual_build/
+	cp * ./manual_build/ -Rfv
+	wkhtmltopdf manual_build/Manual.html Manual.pdf
+	#gimli -f ${filename}.md -stylesheet override.css
+	#rm ${filename}.md 
 	popd >/dev/null
 else
 	echo -e "\nFAILED"
