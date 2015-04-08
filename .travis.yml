@@ -26,7 +26,7 @@ before_install:
   - wget "https://launchpad.net/gcc-arm-embedded/4.8/4.8-2014-q3-update/+download/gcc-arm-none-eabi-4_8-2014q3-20140805-linux.tar.bz2"
 
 install: 
-  - sudo apt-get install build-essential git libc6-i386
+  - sudo apt-get install build-essential git libc6-i386 wkhtmltopdf
   - tar -xf gcc-arm-none-eabi-4_8-2014q3-20140805-linux.tar.bz2
   - export PATH=$PATH:$PWD/gcc-arm-none-eabi-4_8-2014q3/bin
    
