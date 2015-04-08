@@ -658,6 +658,9 @@ unbrick_$(TARGET): $(TARGET_HEX)
 
 unbrick: unbrick_$(TARGET)
 
+manual:
+	support/manual/build_docs.sh
+
 help:
 	@echo ""
 	@echo "Makefile for the $(FORKNAME) firmware"
