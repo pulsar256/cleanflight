@@ -1,7 +1,7 @@
 #!/bin/bash
 
-filename=Manual
-doc_files=(
+OUTPUT_FILENAME=Manual
+DOC_FILE_LIST=(
 	'Introduction.md'
 	'Safety.md'
 	'Installation.md'
@@ -36,7 +36,6 @@ doc_files=(
 	'Board - ChebuzzF3.md'
 )
 
-
 BASEDIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 DBASE=${BASEDIR}/../../docs
 DTMP=${BASEDIR}/tmp
@@ -61,31 +60,30 @@ pushd .
 #install nodejs componentns
 cd $BASEDIR
 npm install
-#patch markdown-styles github layout
-cd $DTMP
-$GMD --export github
-cat ${BASEDIR}/override.css >> output/assets/css/github-markdown.css
 popd
 
-echo "Building ${filename}.pdf"
-
+echo "Building ${OUTPUT_FILENAME}.pdf"
 
 #collect all non-md resources
 cp ${DBASE}/* ${DTMP}/manual_build/ -Rf
 find ${DTMP} -type f -name "*.md" -exec rm {} \;
 
 #concatenate all markdown files
-for i in "${doc_files[@]}"
+for i in "${DOC_FILE_LIST[@]}"
 do
-	cat "${DBASE}/$i" >> ${DTMP}/${filename}.md
-	echo -e "\n" >> ${DTMP}/${filename}.md
-	echo -e ":PAGEBREAK:" >> ${DTMP}/${filename}.md
+	cat "${DBASE}/$i" >> ${DTMP}/${OUTPUT_FILENAME}.md
+	echo -e "\n" >> ${DTMP}/${OUTPUT_FILENAME}.md
+	echo -e ":PAGEBREAK:" >> ${DTMP}/${OUTPUT_FILENAME}.md
 done
 
 # generate html
-${GMD} --layout ${DTMP}/output --input ${DTMP}/Manual.md --output ${DTMP}/manual_build/
+${GMD} --layout github --input ${DTMP}/${OUTPUT_FILENAME}.md --output ${DTMP}/manual_build/
 
-sed -f ${BASEDIR}/postprocess_html.sed ${DTMP}/manual_build/Manual.html > ${DTMP}/manual_build/Manual_post.html
+sed -f ${BASEDIR}/postprocess_html.sed ${DTMP}/manual_build/${OUTPUT_FILENAME}.html > ${DTMP}/manual_build/${OUTPUT_FILENAME}_post.html
 
 #convert html to pdf
-wkhtmltopdf --margin-top 10mm --margin-bottom 10mm ${DTMP}/manual_build/Manual_post.html ${DTMP}/Manual.pdf
+wkhtmltopdf \
+	--margin-top 10mm \
+	--margin-bottom 10mm \
+	--user-style-sheet ${BASEDIR}/override.css \
+	${DTMP}/manual_build/${OUTPUT_FILENAME}_post.html ${BASEDIR}/../../${OUTPUT_FILENAME}.pdf
