@@ -61,14 +61,9 @@ pushd .
 #install nodejs componentns
 cd $BASEDIR
 npm install
-#patch markdown-styles github layout
-cd $DTMP
-$GMD --export github
-cat ${BASEDIR}/override.css >> output/assets/css/github-markdown.css
 popd
 
 echo "Building ${filename}.pdf"
-
 
 #collect all non-md resources
 cp ${DBASE}/* ${DTMP}/manual_build/ -Rf
@@ -83,9 +78,9 @@ do
 done
 
 # generate html
-${GMD} --layout ${DTMP}/output --input ${DTMP}/Manual.md --output ${DTMP}/manual_build/
+${GMD} --layout github --input ${DTMP}/${filename}.md --output ${DTMP}/manual_build/
 
-sed -f ${BASEDIR}/postprocess_html.sed ${DTMP}/manual_build/Manual.html > ${DTMP}/manual_build/Manual_post.html
+sed -f ${BASEDIR}/postprocess_html.sed ${DTMP}/manual_build/${filename}.html > ${DTMP}/manual_build/${filename}_post.html
 
 #convert html to pdf
-wkhtmltopdf --margin-top 10mm --margin-bottom 10mm ${DTMP}/manual_build/Manual_post.html ${DTMP}/Manual.pdf
+wkhtmltopdf --margin-top 10mm --margin-bottom 10mm --user-style-sheet ${BASEDIR}/override.css ${DTMP}/manual_build/${filename}_post.html ${BASEDIR}/../../${filename}.pdf
