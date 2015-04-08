@@ -79,11 +79,13 @@ for i in "${doc_files[@]}"
 do
 	cat "${DBASE}/$i" >> ${DTMP}/${filename}.md
 	echo -e "\n" >> ${DTMP}/${filename}.md
-	echo -e "------" >> ${DTMP}/${filename}.md
+	echo -e ":PAGEBREAK:" >> ${DTMP}/${filename}.md
 done
 
 # generate html
 ${GMD} --layout ${DTMP}/output --input ${DTMP}/Manual.md --output ${DTMP}/manual_build/
 
+sed -f ${BASEDIR}/postprocess_html.sed ${DTMP}/manual_build/Manual.html > ${DTMP}/manual_build/Manual_post.html
+
 #convert html to pdf
-wkhtmltopdf ${DTMP}/manual_build/Manual.html ${DTMP}/Manual.pdf
+wkhtmltopdf --margin-top 10mm --margin-bottom 10mm ${DTMP}/manual_build/Manual_post.html ${DTMP}/Manual.pdf
