@@ -1,0 +1,20 @@
+/* overrides */
+BODY .markdown-body PRE {
+  font-size: 10px;
+}
+
+BODY .markdown-body TABLE {
+  font-size: 10px;
+}
+
+BODY .markdown-body CODE {
+  font-size: 10px;
+}
+
+BODY .markdown-body HR {
+  page-break-after: always
+}
+
+BODY .markdown-body TABLE TD {
+  padding: 3px 3px;
+}

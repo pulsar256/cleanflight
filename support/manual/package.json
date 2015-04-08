@@ -1,0 +1,10 @@
+{
+  "name": "cleanflight",
+  "version": "0.0.1",
+  "dependencies": {
+    "markdown-styles": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=0.12.0"
+  }
+}
